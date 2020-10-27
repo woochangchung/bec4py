@@ -144,7 +144,11 @@ class BEC4image:
         try:
             if self.frameN != 1:
                 raise frameNumError
-            pass # implement this later
+            fsz = int(self.rowN/3)
+            self.pwa = np.minimum( self.raw[:, 0, :, :fsz], 65535 )
+            self.pwoa = np.minimum( self.raw[:, 0, :, fsz:(2 * fsz)], 65535 )
+            self.dark = np.minimum( self.raw[:, 0, :, 2*fsz : (3*fsz)], 65535 )
+            self.absImg = -np.log( np.maximum( np.abs( (self.pwa - self.dark) / (self.pwoa - self.dark) ), 0.002 ) )
         except frameNumError:
             print(f"you have {self.frameN} frames. That's too many for kinetics imaging.")
 
