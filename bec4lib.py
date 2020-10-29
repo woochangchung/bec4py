@@ -343,17 +343,22 @@ def multiFrameAnalysis(Ncounts, frame_number, scan_var):
         
     return frame1_ave, frame3_ave, frame2_ave, frame1_std, frame2_std, frame3_std
 
-def spdf_jackknife(ncount,doublon_mode,scan_var):
+def spdf_jackknife(x_arr,y_arr,flag = 0):
     """
     Uses jackknifing method to calculate unbiased estimate of SPDF mean and variance
 
-    ncount: array of ncount
-    doublon_mode: array of 'doublon_mode' variable value
-    scan_var: array of specified variable value
+    input
+        x_arr: (# images,1) scanning variable
+        y_arr: (# images,3) 
+    
+    output
+        dat: (# unique x-var,2,2 )
+        dat[:,0,:] doublon fraction and error
+        dat[:,1,:] spdf fraction and error
 
     
     """
-    var_unique, unique_key, unique_counts = np.unique(scan_var,return_inverse=True,return_counts=True)
+    var_unique, unique_key, unique_counts = np.unique(x_arr,return_inverse=True,return_counts=True)
     a = dict() # for  all atoms
     p = dict() # for kill pairs
     d = dict() # for kill doublons
@@ -386,18 +391,42 @@ def spdf_jackknife(ncount,doublon_mode,scan_var):
         p_j = np.fromiter((p_mean[val] + 1/(cts-1)*(p_mean[val] - p_i) for p_i in p[val]),dtype=np.float)
         d_j = np.fromiter((d_mean[val] + 1/(cts-1)*(d_mean[val] - d_i) for d_i in d[val]),dtype=np.float)
         
+        if flag == 0:
+            dbl_jbar = np.mean((a_j-d_j)/a_j)
+            dbl_jbarSquared = np.mean(np.power((a_j-d_j)/a_j,2))
         
-        dbl_jbar = np.mean((a_j-d_j)/a_j)
-        dbl_jbarSquared = np.mean(np.power((a_j-d_j)/a_j,2))
-        
-        spdf_jbar = np.mean((a_j-p_j)/(a_j-d_j))
-        spdf_jbarSquared = np.mean(np.power((a_j-p_j)/(a_j-d_j),2))
+            spdf_jbar = np.mean((a_j-p_j)/(a_j-d_j))
+            spdf_jbarSquared = np.mean(np.power((a_j-p_j)/(a_j-d_j),2))
     
-        dbl_jackknifed = cts*(a_mean[val]-d_mean[val])/a_mean[val] - (cts-1)*dbl_jbar
-        dbl_err_jackknifed = np.sqrt((cts-1)*(dbl_jbarSquared-dbl_jbar**2))
+            dbl_jackknifed = cts*(a_mean[val]-d_mean[val])/a_mean[val] - (cts-1)*dbl_jbar
+            dbl_err_jackknifed = np.sqrt((cts-1)*(dbl_jbarSquared-dbl_jbar**2))
         
-        spdf_jackknifed = cts*(a_mean[val]-p_mean[val])/(a_mean[val]-d_mean[val]) - (cts-1)*spdf_jbar
-        spdf_err_jackknifed = np.sqrt((cts-1)*(spdf_jbarSquared-spdf_jbar**2))
+            spdf_jackknifed = cts*(a_mean[val]-p_mean[val])/(a_mean[val]-d_mean[val]) - (cts-1)*spdf_jbar
+            spdf_err_jackknifed = np.sqrt((cts-1)*(spdf_jbarSquared-spdf_jbar**2))
+        elif flag == 1:
+            dbl_jbar = np.mean((d_j)/a_j)
+            dbl_jbarSquared = np.mean(np.power((d_j)/a_j,2))
+        
+            spdf_jbar = np.mean((a_j-p_j)/(d_j))
+            spdf_jbarSquared = np.mean(np.power((a_j-p_j)/(d_j),2))
+    
+            dbl_jackknifed = cts*(d_mean[val])/a_mean[val] - (cts-1)*dbl_jbar
+            dbl_err_jackknifed = np.sqrt((cts-1)*(dbl_jbarSquared-dbl_jbar**2))
+        
+            spdf_jackknifed = cts*(a_mean[val]-p_mean[val])/(d_mean[val]) - (cts-1)*spdf_jbar
+            spdf_err_jackknifed = np.sqrt((cts-1)*(spdf_jbarSquared-spdf_jbar**2))
+        else:
+            dbl_jbar = np.mean((d_j)/a_j)
+            dbl_jbarSquared = np.mean(np.power((d_j)/a_j,2))
+        
+            spdf_jbar = np.mean((p_j)/(d_j))
+            spdf_jbarSquared = np.mean(np.power((p_j)/(d_j),2))
+    
+            dbl_jackknifed = cts*(d_mean[val])/a_mean[val] - (cts-1)*dbl_jbar
+            dbl_err_jackknifed = np.sqrt((cts-1)*(dbl_jbarSquared-dbl_jbar**2))
+        
+            spdf_jackknifed = cts*(p_mean[val])/(d_mean[val]) - (cts-1)*spdf_jbar
+            spdf_err_jackknifed = np.sqrt((cts-1)*(spdf_jbarSquared-spdf_jbar**2))
     
         dat[i,0,0] = dbl_jackknifed
         dat[i,0,1] = dbl_err_jackknifed
