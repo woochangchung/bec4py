@@ -9,10 +9,8 @@ from bec4lib import *
 from bec4fit import *
 
 # This block of parameters (might) need to be changed between scans
-imageIDs = np.arange(389799, 389879 + 1)
+imageIDs = np.arange(390355, 390444 + 1)
 varname = "Generic_Hold_Time"
-xmin, xmax = 10, 40
-ymin, ymax = 20, 50
 useConstrainedFits = True
 
 rawimgs = queryImages(imageIDs)
@@ -23,7 +21,12 @@ imgdata = BEC4image(rawimgs, camdat)
 imgdata.dispersiveImage([2, 3, 4], doPCA = True)
 
 imshape = imgdata.pciImg.shape
-allimgs = imgdata.pciImg[:, :, ymin:ymax, xmin:xmax]
+
+# Find center using "all atom" shots, and cut out region around atoms
+allimgs = imgdata.pciImg
+(xp, yp) = findAtomPosition(allimgs[:, 0])
+window = 15
+allimgs = imgdata.pciImg[:, :, (yp - window) : (yp + window), (xp - window) : (xp + window)]
 
 doublonMode = np.tile([1, 3, 2], imshape[0])
 varvals = np.repeat(varvals, 3)

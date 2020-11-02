@@ -1,6 +1,7 @@
 import numpy as np
 import pymysql.cursors
 from scipy.optimize import curve_fit
+from scipy.signal import medfilt2d
 
 def server_settings():
     # Returns our server settings; can be passed into pymysql using dictionary splat: **
@@ -435,7 +436,12 @@ def spdf_jackknife(x_arr,y_arr,flag = 0):
     
     return dat
     
-    
+def findAtomPosition(imgs):
+    # Given an array of images, find and return the x and y coordinates of the peak
+    filt_img = medfilt2d( np.mean(imgs, axis = 0) )
+    xpos = np.sum(filt_img, axis = 0).argmax()
+    ypos = np.sum(filt_img, axis = 1).argmax()
+    return xpos, ypos
     
     
     
