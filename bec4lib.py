@@ -438,7 +438,7 @@ def spdf_jackknife(x_arr,y_arr,flag = 0):
     
 def findAtomPosition(imgs):
     # Given an array of images, find and return the x and y coordinates of the peak
-    filt_img = medfilt2d( np.mean(imgs, axis = 0) )
+    filt_img = medfilt2d( np.mean(imgs, axis = 0), kernel_size = 5 )
     xpos = np.sum(filt_img, axis = 0).argmax()
     ypos = np.sum(filt_img, axis = 1).argmax()
     return xpos, ypos
