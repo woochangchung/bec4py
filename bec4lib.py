@@ -142,13 +142,23 @@ class BEC4image:
         except frameNumError:
             print(f"you only have {self.frameN} frame(s). You need three to compute normal absorption images")
     
-    def absorptiveKinetic(self,knifeEdge=30, bottomEdge = 20, doPCA = False):
+    def absorptiveKinetic(self,knifeEdge=30, bottomEdge = 20, doPCA = False, PCA_window = None):
         """
         create absorption images assuming a single-shot kinetics image with three windows.
 
-        knifeEdge: row index below which there is no razor blade visible
+        knifeEdge: 
+            row index below which there is no razor blade visible
 
-        bottomEdge: number of rows with artifacts
+        bottomEdge:
+             number of rows with artifacts
+
+        doPCA: 
+            flag for whether to apply PCA to PWOA or not
+
+        PCA_window:
+             size of the PCA basis to use (for a given image, it uses (PCA_window) number of nearest images to compute the basis).
+             Basically, you attempt to use (PCA_window//2) neighbors to the left and (PCA_window//2) to the right of a chosen index. 
+             If None or equal to dataset size, use a global PCA. 
         """
         try:
             if self.frameN != 1:
@@ -167,12 +177,24 @@ class BEC4image:
             if doPCA:
                 a_down = a_down.reshape(self.shotsN,-1)
                 a_up = a_up.reshape(self.shotsN,-1)
+                
+                if PCA_window == None or PCA_window == self.shotsN:
 
-                meanPWOA = np.mean(a_down,axis=0)
-                pwoa_flat = a_down - meanPWOA
-                u,s,vh = np.linalg.svd(pwoa_flat,full_matrices=False)
-                estPWOA = ((a_up-meanPWOA)@vh.T)@vh + meanPWOA
-                self.absImg = -np.log(np.maximum(np.abs(a_up/estPWOA),0.002)).reshape(self.shotsN,self.colN,windowSize-knifeEdge-bottomEdge)
+                    meanPWOA = np.mean(a_down,axis=0)
+                    pwoa_flat = a_down - meanPWOA
+                    _,_,vh = np.linalg.svd(pwoa_flat,full_matrices=False)
+                    estPWOA = ((a_up-meanPWOA)@vh.T)@vh + meanPWOA
+                    self.absImg = -np.log(np.maximum(np.abs(a_up/estPWOA),0.002)).reshape(self.shotsN,self.colN,windowSize-knifeEdge-bottomEdge)
+                
+                else:
+                    k = PCA_window//2
+                    self.absImg = np.zeros_like(self.pwa)
+                    for i in range(self.shotsN):
+                        ind_select = _grabPCAindex(i,k,self.shotsN)
+                        meanPWOA = np.mean(a_down[ind_select],axis=0)
+                        _,_,vh_i = np.linalg.svd(a_down[ind_select]-meanPWOA,full_matrices=False)
+                        estPWOA_i = ((a_up[i]-meanPWOA)@vh_i.T)@vh_i + meanPWOA
+                        self.absImg[i] = -np.log(np.maximum(np.abs(a_up[i]/estPWOA_i),0.002)).reshape(self.colN,windowSize-knifeEdge-bottomEdge)
 
         except frameNumError:
             print(f"you have {self.frameN} frames. That's too many for kinetics imaging.")
@@ -247,6 +269,33 @@ class BEC4image:
             return self.pciImg
         except frameNumError:
             print(f"you have {self.frameN} frame(s). You only need one to compute dispersive images")
+
+def _grabPCAindex(ind,k,imx):
+    """
+    for a given index, find the +/- k nearest neighbors within the range of the indices
+
+    ind: index
+    k: number of nearest neighbors to the left and right respectively
+    imx: maximum index value possible
+    """
+    lo = ind-k
+    hi = ind+k
+    if lo < 0:
+        hi -= lo
+        lo = 0
+        if hi > imx:
+            print(f"Try a smaller window size. You are trying to access {hi} but {imx} is the highest index.")
+            raise IndexError
+    elif hi>imx:
+        lo -= hi-imx
+        hi = imx
+        if lo < 0:
+            print(f"Try a smaller window size. You are trying to access {lo} but 0 is the smallest index")
+            raise IndexError
+    out = np.zeros((imx),dtype=np.int)
+    out[lo:hi+1] = 1
+    return out
+
 
 
 def pca(pwas, pwoas):
@@ -510,6 +559,3 @@ def findAtomPosition(imgs):
     xpos = np.sum(filt_img, axis = 0).argmax()
     ypos = np.sum(filt_img, axis = 1).argmax()
     return xpos, ypos
-    
-    
-    
