@@ -73,9 +73,13 @@ def _gaussian2Drot(M, *args):
     x, y = M
     return gaussian2Drot(x,y,*args)
 
-def absImgNcount(img):
+def absImgNcount(img,isConstrained=False,p0c = None):
     """
-    input: a 2D absorption image
+    input
+        img: a 2D absorption image
+        isConstrained: whether to use pre-defined bounds and guesses
+        p0c: a tuple of initial guess for x and y parameters
+
     output: Ncount computed from two 1D Gaussian fits to the data
     """
     t = np.exp(-img);
@@ -101,6 +105,12 @@ def absImgNcount(img):
     p0_x =  [xm,xmi,bs/5,0]
     p0_y = [ym,ymi,bs/5,0]
     
+    if isConstrained and p0c:
+        p0_x = p0c[0]
+        p0_y = p0c[1]
+        bound_x = ((p0_x[0]*0.5,p0_x[1]-1,p0_x[2]*0.95,p0_x[3]-0.2),(p0_x[0]*1.5,p0_x[1]+1,p0_x[2]*1.05,p0_x[3]+0.2))
+        bound_y = ((p0_y[0]*0.5,p0_y[1]-1,p0_y[2]*0.95,p0_y[3]-0.2),(p0_y[0]*1.5,p0_y[1]+1,p0_y[2]*1.05,p0_y[3]+0.2))
+
     fparsX, _ = curve_fit( gaussian, np.arange(0, len(xcut)), xcut, p0 = p0_x, bounds=bound_x)
     fparsY, _ = curve_fit( gaussian, np.arange(0, len(ycut)), ycut, p0 = p0_y, bounds=bound_y)
     

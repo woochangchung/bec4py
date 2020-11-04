@@ -2,6 +2,7 @@ import numpy as np
 import pymysql.cursors
 from scipy.optimize import curve_fit
 from scipy.signal import medfilt2d
+from collections import defaultdict
 
 def server_settings():
     # Returns our server settings; can be passed into pymysql using dictionary splat: **
@@ -171,7 +172,6 @@ class BEC4image:
                 pwoa_flat = a_down - meanPWOA
                 u,s,vh = np.linalg.svd(pwoa_flat,full_matrices=False)
                 estPWOA = ((a_up-meanPWOA)@vh.T)@vh + meanPWOA
-                estPWOA
                 self.absImg = -np.log(np.maximum(np.abs(a_up/estPWOA),0.002)).reshape(self.shotsN,self.colN,windowSize-knifeEdge-bottomEdge)
 
         except frameNumError:
@@ -346,11 +346,15 @@ def multiFrameAnalysis(Ncounts, frame_number, scan_var):
 
 def spdf_jackknife(x_arr,y_arr,flag = 0):
     """
-    Uses jackknifing method to calculate unbiased estimate of SPDF mean and variance
+    Uses jackknifing method to calculate unbiased estimate of SPDF mean and variance. For dispersive imaging.
 
     input
         x_arr: (# images,1) scanning variable
         y_arr: (# images,3) 
+        flag:   0 calculates SPDF usual way.
+                1 assumes kill dbl is actually (all image - kill dbl image). 
+                2 assumes kill dbl and kill pair are actually doublons and pairs calculated from difference of images
+
     
     output
         dat: (# unique x-var,2,2 )
@@ -363,14 +367,14 @@ def spdf_jackknife(x_arr,y_arr,flag = 0):
     a = dict() # for  all atoms
     p = dict() # for kill pairs
     d = dict() # for kill doublons
-        
-    #all_atoms = 
-
+    
     key_order = np.argsort(unique_key)   
+
+
     all_atoms = y_arr[key_order,0] # all atoms
     kill_pairs = y_arr[key_order,1] # kill pairs
     kill_dbl = y_arr[key_order,2] # kill doublons
-    
+
     total = 0
     for val,cts in zip(var_unique,unique_counts):
         a[val] = all_atoms[total:total+cts]
@@ -388,9 +392,9 @@ def spdf_jackknife(x_arr,y_arr,flag = 0):
     dat = np.zeros((len(var_unique),2,2))
     
     for i,val,cts in zip(arr_ind,var_unique,unique_counts):
-        a_j = np.fromiter((a_mean[val] + 1/(cts-1)*(a_mean[val] - a_i) for a_i in a[val]),dtype=np.float)
-        p_j = np.fromiter((p_mean[val] + 1/(cts-1)*(p_mean[val] - p_i) for p_i in p[val]),dtype=np.float)
-        d_j = np.fromiter((d_mean[val] + 1/(cts-1)*(d_mean[val] - d_i) for d_i in d[val]),dtype=np.float)
+        a_j = np.fromiter((a_mean[val] + (1/(cts-1))*(a_mean[val] - a_i) for a_i in a[val]),dtype=np.float)
+        p_j = np.fromiter((p_mean[val] + (1/(cts-1))*(p_mean[val] - p_i) for p_i in p[val]),dtype=np.float)
+        d_j = np.fromiter((d_mean[val] + (1/(cts-1))*(d_mean[val] - d_i) for d_i in d[val]),dtype=np.float)
         
         if flag == 0:
             dbl_jbar = np.mean((a_j-d_j)/a_j)
@@ -435,7 +439,71 @@ def spdf_jackknife(x_arr,y_arr,flag = 0):
         dat[i,1,1] = spdf_err_jackknifed
     
     return dat
+
+def spdf_jackknife_absorption(x_arr,y_arr,doublonMode):
+    """
+    Uses jackknifing method to calculate unbiased estimate of SPDF mean and variance. For absorptive imaging.
+
+    input
+        x_arr: (# images) scanning variable
+        y_arr: (# images) 
+        doublonMode: (# images)
     
+    output
+        dat: (# unique x-var,2,2 )
+        dat[:,0,:] doublon fraction and error
+        dat[:,1,:] spdf fraction and error
+
+    """    
+    """
+    a = defaultdict(list) # for  all atoms
+    p = defaultdict(list) # for kill pairs
+    d = defaultdict(list) # for kill doublons
+
+    for xval,dm,ncount in zip(x_arr,doublonMode,y_arr):
+        if dm == 1:
+            a[xval].append(ncount)
+        elif dm == 2:
+            p[xval].append(ncount)
+        elif dm == 3:
+            d[xval].append(ncount)
+
+    a_mean = {val:np.mean(a[val]) for val in a}
+    p_mean = {val:np.mean(p[val]) for val in p}
+    d_mean = {val:np.mean(d[val]) for val in d}
+
+    var_unique = np.unique(x_var)
+    arr_ind = range(len(var_unique))
+    dat = np.zeros((len(var_unique),2,2))
+    
+    for i,val in zip(arr_ind,var_unique):
+        a_j = np.fromiter((a_mean[val] + (1/(len(a[val])-1))*(a_mean[val] - np.array(a_i)) for a_i in a[val]),dtype=np.float)
+        p_j = np.fromiter((p_mean[val] + (1/(len(p[val])-1))*(p_mean[val] - np.array(p_i)) for p_i in p[val]),dtype=np.float)
+        d_j = np.fromiter((d_mean[val] + (1/(len(d[val])-1))*(d_mean[val] - np.array(d_i)) for d_i in d[val]),dtype=np.float)
+    
+        dbl_jbar = np.mean((a_j-d_j)/a_j)
+        dbl_jbarSquared = np.mean(np.power((a_j-d_j)/a_j,2))
+
+        spdf_jbar = np.mean((a_j-p_j)/(a_j-d_j))
+        spdf_jbarSquared = np.mean(np.power((a_j-p_j)/(a_j-d_j),2))
+
+        dbl_jackknifed = cts*(a_mean[val]-d_mean[val])/a_mean[val] - (cts-1)*dbl_jbar
+        dbl_err_jackknifed = np.sqrt((cts-1)*(dbl_jbarSquared-dbl_jbar**2))
+
+        spdf_jackknifed = cts*(a_mean[val]-p_mean[val])/(a_mean[val]-d_mean[val]) - (cts-1)*spdf_jbar
+        spdf_err_jackknifed = np.sqrt((cts-1)*(spdf_jbarSquared-spdf_jbar**2))
+
+        dat[i,0,0] = dbl_jackknifed
+        dat[i,0,1] = dbl_err_jackknifed
+        dat[i,1,0] = spdf_jackknifed
+        dat[i,1,1] = spdf_err_jackknifed
+    
+    return dat
+    """
+    raise NotImplementedError
+    
+
+
 def findAtomPosition(imgs):
     # Given an array of images, find and return the x and y coordinates of the peak
     filt_img = medfilt2d( np.mean(imgs, axis = 0), kernel_size = 5 )
