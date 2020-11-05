@@ -188,13 +188,15 @@ class BEC4image:
                 
                 else:
                     k = PCA_window//2
-                    self.absImg = np.zeros_like(self.pwa)
+                    self.absImg = np.zeros_like(a_up)
                     for i in range(self.shotsN):
-                        ind_select = _grabPCAindex(i,k,self.shotsN)
-                        meanPWOA = np.mean(a_down[ind_select],axis=0)
-                        _,_,vh_i = np.linalg.svd(a_down[ind_select]-meanPWOA,full_matrices=False)
-                        estPWOA_i = ((a_up[i]-meanPWOA)@vh_i.T)@vh_i + meanPWOA
-                        self.absImg[i] = -np.log(np.maximum(np.abs(a_up[i]/estPWOA_i),0.002)).reshape(self.colN,windowSize-knifeEdge-bottomEdge)
+                        ind_select = _grabPCAindex(i,k,self.shotsN-1)
+                        assert len(ind_select) == self.shotsN
+                        meanPWOA = np.mean(a_down[ind_select,:],axis=0)
+                        _, _, vh = np.linalg.svd(a_down[ind_select,:]-meanPWOA,full_matrices=False)
+                        estPWOA_i = ((a_up[i,:]-meanPWOA)@vh.T)@vh + meanPWOA
+                        self.absImg[i,:] = -np.log(np.maximum(np.abs(a_up[i]/estPWOA_i),0.002))
+                    self.absImg = self.absImg.reshape(self.shotsN,self.colN,windowSize-knifeEdge-bottomEdge)
 
         except frameNumError:
             print(f"you have {self.frameN} frames. That's too many for kinetics imaging.")
@@ -292,9 +294,9 @@ def _grabPCAindex(ind,k,imx):
         if lo < 0:
             print(f"Try a smaller window size. You are trying to access {lo} but 0 is the smallest index")
             raise IndexError
-    out = np.zeros((imx),dtype=np.int)
+    out = np.zeros((imx+1),dtype=np.int)
     out[lo:hi+1] = 1
-    return out
+    return out.astype(np.bool)
 
 
 
