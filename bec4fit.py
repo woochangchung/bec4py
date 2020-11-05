@@ -13,6 +13,15 @@ def gaussian( x, *p):
     """
     return p[0] * np.exp( -(x - p[1])**2 / (2 * p[2]**2) ) + p[3]
 
+def gaussian_sloped(x,*p):
+    """
+    1D Gaussian with linear slope
+
+    p: Amplitude, x0, width, offset, slope
+
+    """
+    return p[0] * np.exp( -(x - p[1])**2 / (2 * p[2]**2) ) + p[4]*x + p[3]
+
 def gaussian2D(x,y,x0,y0,sx,sy,A,B):
     """
     2D Gaussian
@@ -100,19 +109,19 @@ def absImgNcount(img,isConstrained=False,p0c = None):
     
     bs = max(len(xcut),len(ycut))
     
-    bound_x = ([xm/10,0,0.0,-1],[xm*2,bs,1.5*bs,1])
-    bound_y = ([ym/10,0,0.0,-1],[ym*2,bs,1.5*bs,1])
-    p0_x =  [xm,xmi,bs/5,0]
-    p0_y = [ym,ymi,bs/5,0]
+    bound_x = ([xm/10,0,0.0,-1,-0.03],[xm*2,bs,1.5*bs,1,0.03])
+    bound_y = ([ym/10,0,0.0,-1,-0.03],[ym*2,bs,1.5*bs,1,0.03])
+    p0_x =  [xm,xmi,bs/5,0,0]
+    p0_y = [ym,ymi,bs/5,0,0]
     
     if isConstrained and p0c:
         p0_x = p0c[0]
         p0_y = p0c[1]
-        bound_x = ((p0_x[0]*0.5,p0_x[1]-1,p0_x[2]*0.95,p0_x[3]-0.2),(p0_x[0]*1.5,p0_x[1]+1,p0_x[2]*1.05,p0_x[3]+0.2))
-        bound_y = ((p0_y[0]*0.5,p0_y[1]-1,p0_y[2]*0.95,p0_y[3]-0.2),(p0_y[0]*1.5,p0_y[1]+1,p0_y[2]*1.05,p0_y[3]+0.2))
+        bound_x = ((p0_x[0]*0.5,p0_x[1]-1,p0_x[2]*0.95,p0_x[3]-0.2,p0_x[4]-0.001),(p0_x[0]*1.5,p0_x[1]+1,p0_x[2]*1.05,p0_x[3]+0.2,p0_x[4]+0.001))
+        bound_y = ((p0_y[0]*0.5,p0_y[1]-1,p0_y[2]*0.95,p0_y[3]-0.2,p0_y[4]-0.001),(p0_y[0]*1.5,p0_y[1]+1,p0_y[2]*1.05,p0_y[3]+0.2,p0_y[4]+0.001))
 
-    fparsX, _ = curve_fit( gaussian, np.arange(0, len(xcut)), xcut, p0 = p0_x, bounds=bound_x)
-    fparsY, _ = curve_fit( gaussian, np.arange(0, len(ycut)), ycut, p0 = p0_y, bounds=bound_y)
+    fparsX, _ = curve_fit( gaussian_sloped, np.arange(0, len(xcut)), xcut, p0 = p0_x, bounds=bound_x)
+    fparsY, _ = curve_fit( gaussian_sloped, np.arange(0, len(ycut)), ycut, p0 = p0_y, bounds=bound_y)
     
     Nx = np.sqrt(2*np.pi) * fparsX[0] * np.abs(fparsX[2])
     Ny = np.sqrt(2*np.pi) * fparsY[0] * np.abs(fparsY[2])
