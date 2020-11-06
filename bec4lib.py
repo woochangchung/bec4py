@@ -142,7 +142,7 @@ class BEC4image:
         except frameNumError:
             print(f"you only have {self.frameN} frame(s). You need three to compute normal absorption images")
     
-    def absorptiveKinetic(self,knifeEdge=30, bottomEdge = 20, doPCA = False, PCA_window = None):
+    def absorptiveKinetic(self,knifeEdge=30, bottomEdge = 20, doPCA = False, PCA_window = None, isFastKinetic = False):
         """
         create absorption images assuming a single-shot kinetics image with three windows.
 
@@ -159,6 +159,9 @@ class BEC4image:
              size of the PCA basis to use (for a given image, it uses (PCA_window) number of nearest images to compute the basis).
              Basically, you attempt to use (PCA_window//2) neighbors to the left and (PCA_window//2) to the right of a chosen index. 
              If None or equal to dataset size, use a global PCA. 
+
+        isFastKinetic:
+            flag for whether we are using "Fast Kinetic" mode, i.e. no extra delay time between PWA and PWOA. PWOA is the first frame.
         """
         try:
             if self.frameN != 1:
@@ -166,9 +169,15 @@ class BEC4image:
             windowSize = 127
             numWindows = self.rowN//windowSize
             
-            self.pwa = np.minimum(self.raw[:,0,:,knifeEdge:windowSize-bottomEdge],65536,dtype='float')
-            self.pwoa = np.minimum(self.raw[:,0,:,windowSize+knifeEdge:2*windowSize-bottomEdge],65536,dtype='float')
+            if isFastKinetic:
+                self.pwoa = np.minimum(self.raw[:,0,:,knifeEdge:windowSize-bottomEdge],65536,dtype='float')
+                self.pwa = np.minimum(self.raw[:,0,:,windowSize+knifeEdge:2*windowSize-bottomEdge],65536,dtype='float')
+            else:
+                self.pwa = np.minimum(self.raw[:,0,:,knifeEdge:windowSize-bottomEdge],65536,dtype='float')
+                self.pwoa = np.minimum(self.raw[:,0,:,windowSize+knifeEdge:2*windowSize-bottomEdge],65536,dtype='float')
             self.dark = np.minimum(self.raw[:,0,:,2*windowSize+knifeEdge:3*windowSize-bottomEdge],65536,dtype='float')
+
+
             a_up = np.minimum(self.pwa-self.dark,65536,dtype='float')
             a_down = np.minimum(self.pwoa-self.dark,65536,dtype='float')
             a_down = np.maximum(a_down,1,dtype='float')
