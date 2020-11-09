@@ -62,7 +62,7 @@ ncount = np.zeros((dat.shotsN))
 for i,image in enumerate(absImg_pca):
     dm = doublonMode[i]
     xval = scan_var[i]
-    fparsx,fparsy,_,_ = bec4fit.absImgNcount(image,isConstrained=True,p0c=constraints[dm,xval])
+    fparsx,fparsy,_,_ = bec4fit.absImgNcount(image,isConstrained=False,p0c=constraints[dm,xval])
     nx = np.sqrt(2*np.pi)*fparsx[0]*np.abs(fparsx[2])
     ny = np.sqrt(2*np.pi)*fparsy[0]*np.abs(fparsy[2])
     ncount[i] = np.sqrt(nx*ny)
