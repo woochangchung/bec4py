@@ -19,6 +19,7 @@ doublonMode = bec4lib.queryVariable(ids,varname='doublonMode')
 
 # apply PCA by unique x-value groups
 xvar_unique, key, counts = np.unique(scan_var,return_inverse=True,return_counts=True)
+lattice_depth = bec4lib.queryVariable(ids[0],'recBT')
 
 sorted_index = np.argsort(scan_var)
 scan_var = scan_var[sorted_index]
@@ -62,7 +63,7 @@ ncount = np.zeros((dat.shotsN))
 for i,image in enumerate(absImg_pca):
     dm = doublonMode[i]
     xval = scan_var[i]
-    fparsx,fparsy,_,_ = bec4fit.absImgNcount(image,isConstrained=True,p0c=constraints[dm,xval])
+    fparsx,fparsy,_,_ = bec4fit.absImgNcount(image,isConstrained=False,p0c=constraints[dm,xval])
     nx = np.sqrt(2*np.pi)*fparsx[0]*np.abs(fparsx[2])
     ny = np.sqrt(2*np.pi)*fparsy[0]*np.abs(fparsy[2])
     ncount[i] = np.sqrt(nx*ny)
@@ -81,5 +82,5 @@ plt.scatter(scan_var[doublonMode==2],ncount[doublonMode==2],label="kill pairs")
 plt.scatter(scan_var[doublonMode==3],ncount[doublonMode==3],label="kill doublons")
 plt.ylim([np.min(ncount)/2,np.max(ncount)*1.1])
 plt.legend()
-fig.suptitle("PCA per unique-x-value groups\n 35/13/35 positive-u pair, no fit constraint",fontsize=20)
+fig.suptitle(f"PCA per unique-x-value groups\n 35/{int(lattice_depth)}/35 positive-u pair, no fit constraint",fontsize=20)
 plt.savefig("back_to_abs_img.png")
