@@ -82,5 +82,10 @@ plt.scatter(scan_var[doublonMode==2],ncount[doublonMode==2],label="kill pairs")
 plt.scatter(scan_var[doublonMode==3],ncount[doublonMode==3],label="kill doublons")
 plt.ylim([np.min(ncount)/2,np.max(ncount)*1.1])
 plt.legend()
+<<<<<<< HEAD
 fig.suptitle(f"PCA per unique-x-value groups\n 35/{int(lattice_depth)}/35 positive-u pair, no fit constraint",fontsize=20)
 plt.savefig("back_to_abs_img.png")
+=======
+fig.suptitle("PCA per unique-x-value groups\n 35/13/35 positive-u pair, no fit constraint",fontsize=20)
+plt.savefig("back_to_abs_img.png")
+>>>>>>> 9d577c54e525311403e5f1e533c8ef33812450b8
