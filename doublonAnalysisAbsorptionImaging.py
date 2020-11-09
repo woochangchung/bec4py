@@ -7,13 +7,16 @@ import bec4lib
 import numpy as np
 import matplotlib.pyplot as plt
 
-ids = np.arange(390852,390957+1)
+ids = np.arange(392318,392515+1) # 10
+#ids = np.arange(392120,392317+1) # 14
+#ids = np.arange(392531,392728+1) # 18
+
 imgs = bec4lib.queryImages(ids)
 camInfo = bec4lib.queryImageSize(ids)
 imgs = np.vstack(imgs)
 
 dat = bec4lib.BEC4image(imgs,camInfo)
-dat.absorptiveKinetic(knifeEdge=25,bottomEdge=30,doPCA=False)
+dat.absorptiveKinetic(knifeEdge=25, bottomEdge=30, doPCA=False, isFastKinetic = True)
 scan_var = bec4lib.queryVariable(ids,'Generic_Hold_Time')
 doublonMode = bec4lib.queryVariable(ids,varname='doublonMode')
 
