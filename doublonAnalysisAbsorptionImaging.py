@@ -20,9 +20,13 @@ doublonMode = bec4lib.queryVariable(ids,varname='doublonMode')
 # apply PCA by unique x-value groups
 xvar_unique, key, counts = np.unique(scan_var,return_inverse=True,return_counts=True)
 
-pwa = dat.pwa
-pwoa = dat.pwoa
-dark = dat.dark
+sorted_index = np.argsort(scan_var)
+scan_var = scan_var[sorted_index]
+doublonMode = doublonMode[sorted_index]
+
+pwa = dat.pwa[sorted_index]
+pwoa = dat.pwoa[sorted_index]
+dark = dat.dark[sorted_index]
 temp = []
 total = 0
 
@@ -59,8 +63,8 @@ for i,image in enumerate(absImg_pca):
     dm = doublonMode[i]
     xval = scan_var[i]
     fparsx,fparsy,_,_ = bec4fit.absImgNcount(image,isConstrained=True,p0c=constraints[dm,xval])
-    nx = 2*np.sqrt(np.pi)*fparsx[0]*np.abs(fparsx[2])
-    ny = 2*np.sqrt(np.pi)*fparsy[0]*np.abs(fparsy[2])
+    nx = np.sqrt(2*np.pi)*fparsx[0]*np.abs(fparsx[2])
+    ny = np.sqrt(2*np.pi)*fparsy[0]*np.abs(fparsy[2])
     ncount[i] = np.sqrt(nx*ny)
 
 dblfrac,spdf,dblerr,spdferr = bec4lib.doublonAnalysis(ncount,doublonMode,scan_var)
