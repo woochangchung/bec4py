@@ -7,7 +7,7 @@ import bec4lib
 import numpy as np
 import matplotlib.pyplot as plt
 
-ids = np.arange(392777, 392947 + 1)
+ids = np.arange(392777, 392970 + 1)
 
 imgs = bec4lib.queryImages(ids)
 camInfo = bec4lib.queryImageSize(ids)
@@ -59,14 +59,14 @@ ncount = np.zeros((dat.shotsN))
 for i,image in enumerate(absImg_pca):
     dm = doublonMode[i]
     xval = scan_var[i]
-    fparsx,fparsy,_,_ = bec4fit.absImgNcount(image,isConstrained=True,p0c=constraints[dm,xval])
+    fparsx,fparsy,_,_ = bec4fit.absImgNcount(image,isConstrained=False,p0c=constraints[dm,xval])
     nx = np.sqrt(2*np.pi)*fparsx[0]*np.abs(fparsx[2])
     ny = np.sqrt(2*np.pi)*fparsy[0]*np.abs(fparsy[2])
     ncount[i] = np.sqrt(nx*ny)
 
 dblfrac,spdf,dblerr,spdferr = bec4lib.doublonAnalysis(ncount,doublonMode,scan_var)
 
-fig = plt.figure(figsize=(12,4))
+fig = plt.figure(figsize=(10,4))
 fig.add_subplot(1,2,1)
 plt.errorbar(xvar_unique,spdf,yerr=spdferr,fmt="o",label='spdf')
 plt.errorbar(xvar_unique,dblfrac,yerr=dblerr,fmt="o",label='dbl')
@@ -78,5 +78,6 @@ plt.scatter(scan_var[doublonMode==2],ncount[doublonMode==2],label="kill pairs")
 plt.scatter(scan_var[doublonMode==3],ncount[doublonMode==3],label="kill doublons")
 plt.ylim([np.min(ncount)/2,np.max(ncount)*1.1])
 plt.legend()
-#fig.suptitle("PCA per unique-x-value groups\n 35/13/35 positive-u pair, no fit constraint",fontsize=20)
+fig.suptitle("PCA per unique-x-value groups\n 35/22/35 positive-u pair, no fit constraint",fontsize=20)
+plt.tight_layout()
 #plt.savefig("back_to_abs_img.png")
