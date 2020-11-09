@@ -22,10 +22,15 @@ doublonMode = bec4lib.queryVariable(ids,varname='doublonMode')
 
 # apply PCA by unique x-value groups
 xvar_unique, key, counts = np.unique(scan_var,return_inverse=True,return_counts=True)
+lattice_depth = bec4lib.queryVariable(ids[0],'recBT')
 
-pwa = dat.pwa
-pwoa = dat.pwoa
-dark = dat.dark
+sorted_index = np.argsort(scan_var)
+scan_var = scan_var[sorted_index]
+doublonMode = doublonMode[sorted_index]
+
+pwa = dat.pwa[sorted_index]
+pwoa = dat.pwoa[sorted_index]
+dark = dat.dark[sorted_index]
 temp = []
 total = 0
 
@@ -80,6 +85,8 @@ plt.scatter(scan_var[doublonMode==2],ncount[doublonMode==2],label="remove doublo
 plt.scatter(scan_var[doublonMode==3],ncount[doublonMode==3],label="remove pairs")
 plt.ylim([np.min(ncount)/2,np.max(ncount)*1.1])
 plt.legend()
-#fig.suptitle("PCA per unique-x-value groups\n 35/22/35 positive-u pair, no fit constraint",fontsize=20)
+
+fig.suptitle(f"PCA per unique-x-value groups\n 35/{int(lattice_depth)}/35 positive-u pair, no fit constraint",fontsize=20)
 plt.tight_layout()
 #plt.savefig("back_to_abs_img.png")
+
