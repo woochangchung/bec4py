@@ -7,14 +7,17 @@ import bec4lib
 import numpy as np
 import matplotlib.pyplot as plt
 
-ids = np.arange(390852,390957+1)
+ids = np.arange(392777, 392974 + 1)
+ids = np.arange(393009, 393014 + 1)
+
 imgs = bec4lib.queryImages(ids)
 camInfo = bec4lib.queryImageSize(ids)
 imgs = np.vstack(imgs)
 
 dat = bec4lib.BEC4image(imgs,camInfo)
-dat.absorptiveKinetic(knifeEdge=25,bottomEdge=30,doPCA=False)
+dat.absorptiveKinetic(knifeEdge=25, bottomEdge=30, doPCA=False, isFastKinetic = True)
 scan_var = bec4lib.queryVariable(ids,'Generic_Hold_Time')
+scan_var = bec4lib.queryVariable(ids, 'DIMPLE_TOP')
 doublonMode = bec4lib.queryVariable(ids,varname='doublonMode')
 
 imageids = bec4lib.queryImageID(ids)
@@ -77,7 +80,7 @@ for i,image in enumerate(absImg_pca):
 
 dblfrac,spdf,dblerr,spdferr = bec4lib.doublonAnalysis(ncount,doublonMode,scan_var)
 
-fig = plt.figure(figsize=(16,6))
+fig = plt.figure(figsize=(10,4))
 fig.add_subplot(1,2,1)
 plt.errorbar(xvar_unique,spdf,yerr=spdferr,fmt="o",label='spdf')
 plt.errorbar(xvar_unique,dblfrac,yerr=dblerr,fmt="o",label='dbl')
@@ -85,9 +88,12 @@ plt.legend()
 
 fig.add_subplot(1,2,2)
 plt.scatter(scan_var[doublonMode==1],ncount[doublonMode==1],label="all")
-plt.scatter(scan_var[doublonMode==2],ncount[doublonMode==2],label="kill pairs")
-plt.scatter(scan_var[doublonMode==3],ncount[doublonMode==3],label="kill doublons")
+plt.scatter(scan_var[doublonMode==2],ncount[doublonMode==2],label="remove doublons")
+plt.scatter(scan_var[doublonMode==3],ncount[doublonMode==3],label="remove pairs")
 plt.ylim([np.min(ncount)/2,np.max(ncount)*1.1])
 plt.legend()
+
 fig.suptitle(f"PCA per unique-x-value groups\n 35/{int(lattice_depth)}/35 positive-u pair, no fit constraint",fontsize=20)
-plt.savefig("back_to_abs_img.png")
+plt.tight_layout()
+#plt.savefig("back_to_abs_img.png")
+

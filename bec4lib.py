@@ -251,14 +251,14 @@ class BEC4image:
             windowSize = 127
             numWindows = self.rowN//windowSize
             
-            self.pwa = np.zeros((self.shotsN,len(pwaLoc),self.colN,windowSize-knifeEdge-1))
-            self.pciImg = np.zeros((self.shotsN,len(pwaLoc),self.colN,windowSize-knifeEdge-1))
-            self.darkGround = np.zeros((self.shotsN,len(pwaLoc),self.colN,windowSize-knifeEdge-1)) # estimate scattered power
+            self.pwa = np.zeros((self.shotsN, len(pwaLoc), self.colN,windowSize-knifeEdge-1))
+            self.pciImg = np.zeros((self.shotsN, len(pwaLoc), self.colN,windowSize-knifeEdge-1))
+            self.darkGround = np.zeros((self.shotsN, len(pwaLoc), self.colN,windowSize-knifeEdge-1)) # estimate scattered power
             
             if doPCA:
                 # Duplicate dark images such that the array has the same size as PW(O)A, so we can calculate the PCI image in one go below
                 self.dark = np.minimum(self.raw[:,0,:,(numWindows-1)*windowSize+knifeEdge:numWindows*windowSize-1],65535)
-                self.dark = np.tile(self.dark, [3, 1, 1, 1])
+                self.dark = np.tile(self.dark, [len(pwaLoc), 1, 1, 1])
                 self.dark = np.transpose(self.dark, [1, 0, 2, 3])
                 
                 for q,p in enumerate(pwaLoc):
@@ -584,7 +584,7 @@ def spdf_jackknife_absorption(x_arr,y_arr,doublonMode):
 
 def findAtomPosition(imgs):
     # Given an array of images, find and return the x and y coordinates of the peak
-    filt_img = medfilt2d( np.mean(imgs, axis = 0) )
+    filt_img = medfilt2d( np.mean(imgs, axis = 0), kernel_size = 5 )
     xpos = np.sum(filt_img, axis = 0).argmax()
     ypos = np.sum(filt_img, axis = 1).argmax()
     return xpos, ypos
