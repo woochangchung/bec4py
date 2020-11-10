@@ -20,6 +20,13 @@ scan_var = bec4lib.queryVariable(ids,'Generic_Hold_Time')
 scan_var = bec4lib.queryVariable(ids, 'DIMPLE_TOP')
 doublonMode = bec4lib.queryVariable(ids,varname='doublonMode')
 
+imageids = bec4lib.queryImageID(ids)
+assert len(imageids) == len(imgs)
+for image,id in zip(dat.absImg,imageids):
+    _,flag = bec4fit.findCloud(image)
+    if flag == 1:
+        print(f"beep. Empty image in ID:{id}")
+
 # apply PCA by unique x-value groups
 xvar_unique, key, counts = np.unique(scan_var,return_inverse=True,return_counts=True)
 lattice_depth = bec4lib.queryVariable(ids[0],'recBT')

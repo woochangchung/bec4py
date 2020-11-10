@@ -100,6 +100,24 @@ def queryVariable(ids, varname):
         conn.close()
     return np.array([float(x[varname]) for x in result])
 
+def queryImageID(ids):
+    # Grab image IDs of existent images
+    try:
+        conn = pymysql.connect(**server_settings())
+        if type(ids) != np.ndarray:
+            # If there's only one image we're interested in we need different formatting
+            imageIDstring = str(ids)
+        else:
+            imageIDstring = ', '.join(['%i' % s for s in ids])
+            
+        with conn.cursor() as cursor:
+            sql1 = "SELECT imageID FROM images WHERE imageID IN (" + imageIDstring + ");"
+            cursor.execute(sql1)
+            result = cursor.fetchall()
+    finally:
+        conn.close()
+    return np.array([x['imageID'] for x in result])
+
 class myError(Exception):
     """ 
     Image processing related exceptions
