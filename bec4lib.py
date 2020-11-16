@@ -3,6 +3,7 @@ import pymysql.cursors
 from scipy.optimize import curve_fit
 from scipy.signal import medfilt2d
 from collections import defaultdict
+from scipy.sparse.linalg import bicgstab
 
 def server_settings():
     # Returns our server settings; can be passed into pymysql using dictionary splat: **
@@ -129,6 +130,11 @@ class frameNumError(myError):
     Raised when the number of frames is inappropriate for the used image processing
     """
 
+class noImageError(myError):
+    """
+    Raised when there is no PWA/PWOA stored in the data object. 
+    """
+
 class BEC4image:
     """
     Class for BEC4 image object.
@@ -227,6 +233,68 @@ class BEC4image:
 
         except frameNumError:
             print(f"you have {self.frameN} frames. That's too many for kinetics imaging.")
+    
+    def removeFringe(self, maskCenter, maskSize, edge = 3, numImages=10, shiftSize=1):
+        """
+        Python implementation of HKUST statistical fringe removal method (PHYSICAL REVIEW APPLIED 14, 034006 (2020)
+
+        Assumes each image can be written as a linear superposition of reference images (i.e. PWOA), which include shifted versions of the original reference images.
+        Updates self.absImg to calculate OD with corrected PWOA, with smaller image shape (original_shape[0]-2*edge,original_shape[1]-2*edge)
+
+        You need to determine the appropriate values for 'maskCenter' and 'maskSize' by looking at a representative sample image.
+
+        Input:
+            maskCenter: (tuple or array) central location of mask that will hide the atomic cloud region
+            maskSize : half-width of mask to hide the atomic cloud region
+            edge : number of pixels to cut from (left,right,top,bottom). Must be > shiftSize
+            numImages : number of neighboring images to use as basis. Actual number of images used will be 2*(numImages//2)+1
+            shiftSize : number of step in x and y to shift the image to generate an extended basis set
+
+        """
+        try:
+            assert edge > shiftSize
+            if self.pwa is None:
+                raise noImageError
+            maskShape = self.pwa[0].shape
+            mask = np.ones(maskShape)
+            mask[maskCenter[0]-maskSize:maskCenter[0]+maskSize,maskCenter[1]-maskSize:maskCenter[1]+maskSize] = 0
+
+            k = numImages//2
+            basis_dim = (2*k+1) * ((2*shiftSize + 1)**2)
+            basis_vec_shape = (mask.shape[0]-2*edge,mask.shape[1]-2*edge)
+            basis = np.zeros((basis_dim,*basis_vec_shape))
+            basis_masked = np.zeros_like(basis)
+
+            self.absImg = np.zeros((self.shotsN,*basis_vec_shape))
+            
+            for i in range(self.shotsN):
+                pwa_masked = (self.pwa[i]*mask)[edge:-edge,edge:-edge]
+                ind_select = _grabPCAindex(i,k,self.shotsN-1)
+                assert np.sum(ind_select) == 2*k+1
+                pwoa_select = np.copy(self.pwoa[ind_select])
+                dark_select = np.copy(self.dark[ind_select])
+                for j in range(2*k+1):
+                    idx = 0
+                    for p in range(-shiftSize,shiftSize+1):
+                        for q in range(-shiftSize,shiftSize+1):
+                            pwoa_e = np.roll(np.roll(pwoa_select[j],p,axis=0),q,axis=1)
+                            masked = (pwoa_e)*mask
+                            basis[j*((2*shiftSize+1)**2)+idx,:,:] = (pwoa_e)[edge:-edge,edge:-edge]
+                            basis_masked[j*((2*shiftSize+1)**2)+idx,:,:] = masked[edge:-edge,edge:-edge]
+                            idx += 1
+                C = (basis_masked.reshape(basis_dim,-1))@(basis_masked.reshape(basis_dim,-1)).T
+                P = pwa_masked.ravel()@(basis_masked.reshape(basis_dim,-1)).T
+                beta, _ = bicgstab(C,P,tol=1e-14)
+                pwoa_corrected = beta@basis.reshape(basis_dim,-1)
+                pwoa_corrected = pwoa_corrected.reshape(*basis_vec_shape)
+                pwa_clipped = self.pwa[i][edge:-edge,edge:-edge]
+                dark_clipped = self.dark[i][edge:-edge,edge:-edge]
+                self.absImg[i] = -np.log(np.maximum((pwa_clipped-dark_clipped)/(pwoa_corrected-dark_clipped),0.002))
+
+            
+        except noImageError:
+            print("No PWA/PWOA image detected. Process the images first (e.g. run absorptiveKinetic()")
+
 
     def dispersiveImage(self,pwaLoc,knifeEdge = 20, doPCA = False):
         """
