@@ -2,8 +2,6 @@ import numpy as np
 import pymysql.cursors
 from scipy.optimize import curve_fit
 from scipy.signal import medfilt2d
-from collections import defaultdict
-from scipy.sparse.linalg import bicgstab
 
 def server_settings():
     # Returns our server settings; can be passed into pymysql using dictionary splat: **
@@ -32,6 +30,28 @@ def queryImages(ids):
     
     imgs = np.vstack([np.frombuffer(ds['data'], dtype = 'int8').view('int16') for ds in result])
     return imgs
+
+def queryImageIds(ids):
+    """
+    query image IDs with actual data
+
+    """
+    try:
+        conn = pymysql.connect(**server_settings())
+        if type(ids) != np.ndarray:
+            # If there's only one image we're interested in we need different formatting
+            imageIDstring = str(ids)
+        else:
+            imageIDstring = ', '.join(['%i' % s for s in ids])
+        with conn.cursor() as cursor:
+            sql1 = "SELECT imageID FROM images WHERE imageID IN (" + imageIDstring + ")"
+            cursor.execute(sql1)
+            result = cursor.fetchall()
+    finally:
+        conn.close()
+    
+    imageid = np.array([x['imageID'] for x in result])
+    return imageid
 
 def queryImageSize(ids):
     # Grab the camera settings belonging to a particular image.
@@ -101,24 +121,6 @@ def queryVariable(ids, varname):
         conn.close()
     return np.array([float(x[varname]) for x in result])
 
-def queryImageID(ids):
-    # Grab image IDs of existent images
-    try:
-        conn = pymysql.connect(**server_settings())
-        if type(ids) != np.ndarray:
-            # If there's only one image we're interested in we need different formatting
-            imageIDstring = str(ids)
-        else:
-            imageIDstring = ', '.join(['%i' % s for s in ids])
-            
-        with conn.cursor() as cursor:
-            sql1 = "SELECT imageID FROM images WHERE imageID IN (" + imageIDstring + ");"
-            cursor.execute(sql1)
-            result = cursor.fetchall()
-    finally:
-        conn.close()
-    return np.array([x['imageID'] for x in result])
-
 class myError(Exception):
     """ 
     Image processing related exceptions
@@ -128,11 +130,6 @@ class myError(Exception):
 class frameNumError(myError):
     """
     Raised when the number of frames is inappropriate for the used image processing
-    """
-
-class noImageError(myError):
-    """
-    Raised when there is no PWA/PWOA stored in the data object. 
     """
 
 class BEC4image:
@@ -166,26 +163,13 @@ class BEC4image:
         except frameNumError:
             print(f"you only have {self.frameN} frame(s). You need three to compute normal absorption images")
     
-    def absorptiveKinetic(self,knifeEdge=30, bottomEdge = 20, doPCA = False, PCA_window = None, isFastKinetic = False):
+    def absorptiveKinetic(self,knifeEdge=30, bottomEdge = 20, doPCA = False):
         """
         create absorption images assuming a single-shot kinetics image with three windows.
 
-        knifeEdge: 
-            row index below which there is no razor blade visible
+        knifeEdge: row index below which there is no razor blade visible
 
-        bottomEdge:
-             number of rows with artifacts
-
-        doPCA: 
-            flag for whether to apply PCA to PWOA or not
-
-        PCA_window:
-             size of the PCA basis to use (for a given image, it uses (PCA_window) number of nearest images to compute the basis).
-             Basically, you attempt to use (PCA_window//2) neighbors to the left and (PCA_window//2) to the right of a chosen index. 
-             If None or equal to dataset size, use a global PCA. 
-
-        isFastKinetic:
-            flag for whether we are using "Fast Kinetic" mode, i.e. no extra delay time between PWA and PWOA. PWOA is the first frame.
+        bottomEdge: number of rows with artifacts
         """
         try:
             if self.frameN != 1:
@@ -193,15 +177,9 @@ class BEC4image:
             windowSize = 127
             numWindows = self.rowN//windowSize
             
-            if isFastKinetic:
-                self.pwoa = np.minimum(self.raw[:,0,:,knifeEdge:windowSize-bottomEdge],65536,dtype='float')
-                self.pwa = np.minimum(self.raw[:,0,:,windowSize+knifeEdge:2*windowSize-bottomEdge],65536,dtype='float')
-            else:
-                self.pwa = np.minimum(self.raw[:,0,:,knifeEdge:windowSize-bottomEdge],65536,dtype='float')
-                self.pwoa = np.minimum(self.raw[:,0,:,windowSize+knifeEdge:2*windowSize-bottomEdge],65536,dtype='float')
+            self.pwa = np.minimum(self.raw[:,0,:,knifeEdge:windowSize-bottomEdge],65536,dtype='float')
+            self.pwoa = np.minimum(self.raw[:,0,:,windowSize+knifeEdge:2*windowSize-bottomEdge],65536,dtype='float')
             self.dark = np.minimum(self.raw[:,0,:,2*windowSize+knifeEdge:3*windowSize-bottomEdge],65536,dtype='float')
-
-
             a_up = np.minimum(self.pwa-self.dark,65536,dtype='float')
             a_down = np.minimum(self.pwoa-self.dark,65536,dtype='float')
             a_down = np.maximum(a_down,1,dtype='float')
@@ -210,91 +188,16 @@ class BEC4image:
             if doPCA:
                 a_down = a_down.reshape(self.shotsN,-1)
                 a_up = a_up.reshape(self.shotsN,-1)
-                
-                if PCA_window == None or PCA_window == self.shotsN:
 
-                    meanPWOA = np.mean(a_down,axis=0)
-                    pwoa_flat = a_down - meanPWOA
-                    _,_,vh = np.linalg.svd(pwoa_flat,full_matrices=False)
-                    estPWOA = ((a_up-meanPWOA)@vh.T)@vh + meanPWOA
-                    self.absImg = -np.log(np.maximum(np.abs(a_up/estPWOA),0.002)).reshape(self.shotsN,self.colN,windowSize-knifeEdge-bottomEdge)
-                
-                else:
-                    k = PCA_window//2
-                    self.absImg = np.zeros_like(a_up)
-                    for i in range(self.shotsN):
-                        ind_select = _grabPCAindex(i,k,self.shotsN-1)
-                        assert len(ind_select) == self.shotsN
-                        meanPWOA = np.mean(a_down[ind_select,:],axis=0)
-                        _, _, vh = np.linalg.svd(a_down[ind_select,:]-meanPWOA,full_matrices=False)
-                        estPWOA_i = ((a_up[i,:]-meanPWOA)@vh.T)@vh + meanPWOA
-                        self.absImg[i,:] = -np.log(np.maximum(np.abs(a_up[i]/estPWOA_i),0.002))
-                    self.absImg = self.absImg.reshape(self.shotsN,self.colN,windowSize-knifeEdge-bottomEdge)
+                meanPWOA = np.mean(a_down,axis=0)
+                pwoa_flat = a_down - meanPWOA
+                u,s,vh = np.linalg.svd(pwoa_flat,full_matrices=False)
+                estPWOA = ((a_up-meanPWOA)@vh.T)@vh + meanPWOA
+                estPWOA
+                self.absImg = -np.log(np.maximum(np.abs(a_up/estPWOA),0.002)).reshape(self.shotsN,self.colN,windowSize-knifeEdge-bottomEdge)
 
         except frameNumError:
             print(f"you have {self.frameN} frames. That's too many for kinetics imaging.")
-    
-    def removeFringe(self, maskCenter, maskSize, edge = 3, numImages=10, shiftSize=1):
-        """
-        Python implementation of HKUST statistical fringe removal method (PHYSICAL REVIEW APPLIED 14, 034006 (2020)
-
-        Assumes each image can be written as a linear superposition of reference images (i.e. PWOA), which include shifted versions of the original reference images.
-        Updates self.absImg to calculate OD with corrected PWOA, with smaller image shape (original_shape[0]-2*edge,original_shape[1]-2*edge)
-
-        You need to determine the appropriate values for 'maskCenter' and 'maskSize' by looking at a representative sample image.
-
-        Input:
-            maskCenter: (tuple or array) central location of mask that will hide the atomic cloud region
-            maskSize : half-width of mask to hide the atomic cloud region
-            edge : number of pixels to cut from (left,right,top,bottom). Must be > shiftSize
-            numImages : number of neighboring images to use as basis. Actual number of images used will be 2*(numImages//2)+1
-            shiftSize : number of step in x and y to shift the image to generate an extended basis set
-
-        """
-        try:
-            assert edge > shiftSize
-            if self.pwa is None:
-                raise noImageError
-            maskShape = self.pwa[0].shape
-            mask = np.ones(maskShape)
-            mask[maskCenter[0]-maskSize:maskCenter[0]+maskSize,maskCenter[1]-maskSize:maskCenter[1]+maskSize] = 0
-
-            k = numImages//2
-            basis_dim = (2*k+1) * ((2*shiftSize + 1)**2)
-            basis_vec_shape = (mask.shape[0]-2*edge,mask.shape[1]-2*edge)
-            basis = np.zeros((basis_dim,*basis_vec_shape))
-            basis_masked = np.zeros_like(basis)
-
-            self.absImg = np.zeros((self.shotsN,*basis_vec_shape))
-            
-            for i in range(self.shotsN):
-                pwa_masked = (self.pwa[i]*mask)[edge:-edge,edge:-edge]
-                ind_select = _grabPCAindex(i,k,self.shotsN-1)
-                assert np.sum(ind_select) == 2*k+1
-                pwoa_select = np.copy(self.pwoa[ind_select])
-                dark_select = np.copy(self.dark[ind_select])
-                for j in range(2*k+1):
-                    idx = 0
-                    for p in range(-shiftSize,shiftSize+1):
-                        for q in range(-shiftSize,shiftSize+1):
-                            pwoa_e = np.roll(np.roll(pwoa_select[j],p,axis=0),q,axis=1)
-                            masked = (pwoa_e)*mask
-                            basis[j*((2*shiftSize+1)**2)+idx,:,:] = (pwoa_e)[edge:-edge,edge:-edge]
-                            basis_masked[j*((2*shiftSize+1)**2)+idx,:,:] = masked[edge:-edge,edge:-edge]
-                            idx += 1
-                C = (basis_masked.reshape(basis_dim,-1))@(basis_masked.reshape(basis_dim,-1)).T
-                P = pwa_masked.ravel()@(basis_masked.reshape(basis_dim,-1)).T
-                beta, _ = bicgstab(C,P,tol=1e-14)
-                pwoa_corrected = beta@basis.reshape(basis_dim,-1)
-                pwoa_corrected = pwoa_corrected.reshape(*basis_vec_shape)
-                pwa_clipped = self.pwa[i][edge:-edge,edge:-edge]
-                dark_clipped = self.dark[i][edge:-edge,edge:-edge]
-                self.absImg[i] = -np.log(np.maximum((pwa_clipped-dark_clipped)/(pwoa_corrected-dark_clipped),0.002))
-
-            
-        except noImageError:
-            print("No PWA/PWOA image detected. Process the images first (e.g. run absorptiveKinetic()")
-
 
     def dispersiveImage(self,pwaLoc,knifeEdge = 20, doPCA = False):
         """
@@ -319,14 +222,14 @@ class BEC4image:
             windowSize = 127
             numWindows = self.rowN//windowSize
             
-            self.pwa = np.zeros((self.shotsN, len(pwaLoc), self.colN,windowSize-knifeEdge-1))
-            self.pciImg = np.zeros((self.shotsN, len(pwaLoc), self.colN,windowSize-knifeEdge-1))
-            self.darkGround = np.zeros((self.shotsN, len(pwaLoc), self.colN,windowSize-knifeEdge-1)) # estimate scattered power
+            self.pwa = np.zeros((self.shotsN,len(pwaLoc),self.colN,windowSize-knifeEdge-1))
+            self.pciImg = np.zeros((self.shotsN,len(pwaLoc),self.colN,windowSize-knifeEdge-1))
+            self.darkGround = np.zeros((self.shotsN,len(pwaLoc),self.colN,windowSize-knifeEdge-1)) # estimate scattered power
             
             if doPCA:
                 # Duplicate dark images such that the array has the same size as PW(O)A, so we can calculate the PCI image in one go below
                 self.dark = np.minimum(self.raw[:,0,:,(numWindows-1)*windowSize+knifeEdge:numWindows*windowSize-1],65535)
-                self.dark = np.tile(self.dark, [len(pwaLoc), 1, 1, 1])
+                self.dark = np.tile(self.dark, [3, 1, 1, 1])
                 self.dark = np.transpose(self.dark, [1, 0, 2, 3])
                 
                 for q,p in enumerate(pwaLoc):
@@ -366,33 +269,6 @@ class BEC4image:
             return self.pciImg
         except frameNumError:
             print(f"you have {self.frameN} frame(s). You only need one to compute dispersive images")
-
-def _grabPCAindex(ind,k,imx):
-    """
-    for a given index, find the +/- k nearest neighbors within the range of the indices
-
-    ind: index
-    k: number of nearest neighbors to the left and right respectively
-    imx: maximum index value possible
-    """
-    lo = ind-k
-    hi = ind+k
-    if lo < 0:
-        hi -= lo
-        lo = 0
-        if hi > imx:
-            print(f"Try a smaller window size. You are trying to access {hi} but {imx} is the highest index.")
-            raise IndexError
-    elif hi>imx:
-        lo -= hi-imx
-        hi = imx
-        if lo < 0:
-            print(f"Try a smaller window size. You are trying to access {lo} but 0 is the smallest index")
-            raise IndexError
-    out = np.zeros((imx+1),dtype=np.int)
-    out[lo:hi+1] = 1
-    return out.astype(np.bool)
-
 
 
 def pca(pwas, pwoas):
@@ -492,15 +368,11 @@ def multiFrameAnalysis(Ncounts, frame_number, scan_var):
 
 def spdf_jackknife(x_arr,y_arr,flag = 0):
     """
-    Uses jackknifing method to calculate unbiased estimate of SPDF mean and variance. For dispersive imaging.
+    Uses jackknifing method to calculate unbiased estimate of SPDF mean and variance
 
     input
         x_arr: (# images,1) scanning variable
         y_arr: (# images,3) 
-        flag:   0 calculates SPDF usual way.
-                1 assumes kill dbl is actually (all image - kill dbl image). 
-                2 assumes kill dbl and kill pair are actually doublons and pairs calculated from difference of images
-
     
     output
         dat: (# unique x-var,2,2 )
@@ -513,14 +385,14 @@ def spdf_jackknife(x_arr,y_arr,flag = 0):
     a = dict() # for  all atoms
     p = dict() # for kill pairs
     d = dict() # for kill doublons
-    
+        
+    #all_atoms = 
+
     key_order = np.argsort(unique_key)   
-
-
     all_atoms = y_arr[key_order,0] # all atoms
     kill_pairs = y_arr[key_order,1] # kill pairs
     kill_dbl = y_arr[key_order,2] # kill doublons
-
+    
     total = 0
     for val,cts in zip(var_unique,unique_counts):
         a[val] = all_atoms[total:total+cts]
@@ -538,9 +410,9 @@ def spdf_jackknife(x_arr,y_arr,flag = 0):
     dat = np.zeros((len(var_unique),2,2))
     
     for i,val,cts in zip(arr_ind,var_unique,unique_counts):
-        a_j = np.fromiter((a_mean[val] + (1/(cts-1))*(a_mean[val] - a_i) for a_i in a[val]),dtype=np.float)
-        p_j = np.fromiter((p_mean[val] + (1/(cts-1))*(p_mean[val] - p_i) for p_i in p[val]),dtype=np.float)
-        d_j = np.fromiter((d_mean[val] + (1/(cts-1))*(d_mean[val] - d_i) for d_i in d[val]),dtype=np.float)
+        a_j = np.fromiter((a_mean[val] + 1/(cts-1)*(a_mean[val] - a_i) for a_i in a[val]),dtype=np.float)
+        p_j = np.fromiter((p_mean[val] + 1/(cts-1)*(p_mean[val] - p_i) for p_i in p[val]),dtype=np.float)
+        d_j = np.fromiter((d_mean[val] + 1/(cts-1)*(d_mean[val] - d_i) for d_i in d[val]),dtype=np.float)
         
         if flag == 0:
             dbl_jbar = np.mean((a_j-d_j)/a_j)
@@ -585,74 +457,13 @@ def spdf_jackknife(x_arr,y_arr,flag = 0):
         dat[i,1,1] = spdf_err_jackknifed
     
     return dat
-
-def spdf_jackknife_absorption(x_arr,y_arr,doublonMode):
-    """
-    Uses jackknifing method to calculate unbiased estimate of SPDF mean and variance. For absorptive imaging.
-
-    input
-        x_arr: (# images) scanning variable
-        y_arr: (# images) 
-        doublonMode: (# images)
     
-    output
-        dat: (# unique x-var,2,2 )
-        dat[:,0,:] doublon fraction and error
-        dat[:,1,:] spdf fraction and error
-
-    """    
-    """
-    a = defaultdict(list) # for  all atoms
-    p = defaultdict(list) # for kill pairs
-    d = defaultdict(list) # for kill doublons
-
-    for xval,dm,ncount in zip(x_arr,doublonMode,y_arr):
-        if dm == 1:
-            a[xval].append(ncount)
-        elif dm == 2:
-            p[xval].append(ncount)
-        elif dm == 3:
-            d[xval].append(ncount)
-
-    a_mean = {val:np.mean(a[val]) for val in a}
-    p_mean = {val:np.mean(p[val]) for val in p}
-    d_mean = {val:np.mean(d[val]) for val in d}
-
-    var_unique = np.unique(x_var)
-    arr_ind = range(len(var_unique))
-    dat = np.zeros((len(var_unique),2,2))
-    
-    for i,val in zip(arr_ind,var_unique):
-        a_j = np.fromiter((a_mean[val] + (1/(len(a[val])-1))*(a_mean[val] - np.array(a_i)) for a_i in a[val]),dtype=np.float)
-        p_j = np.fromiter((p_mean[val] + (1/(len(p[val])-1))*(p_mean[val] - np.array(p_i)) for p_i in p[val]),dtype=np.float)
-        d_j = np.fromiter((d_mean[val] + (1/(len(d[val])-1))*(d_mean[val] - np.array(d_i)) for d_i in d[val]),dtype=np.float)
-    
-        dbl_jbar = np.mean((a_j-d_j)/a_j)
-        dbl_jbarSquared = np.mean(np.power((a_j-d_j)/a_j,2))
-
-        spdf_jbar = np.mean((a_j-p_j)/(a_j-d_j))
-        spdf_jbarSquared = np.mean(np.power((a_j-p_j)/(a_j-d_j),2))
-
-        dbl_jackknifed = cts*(a_mean[val]-d_mean[val])/a_mean[val] - (cts-1)*dbl_jbar
-        dbl_err_jackknifed = np.sqrt((cts-1)*(dbl_jbarSquared-dbl_jbar**2))
-
-        spdf_jackknifed = cts*(a_mean[val]-p_mean[val])/(a_mean[val]-d_mean[val]) - (cts-1)*spdf_jbar
-        spdf_err_jackknifed = np.sqrt((cts-1)*(spdf_jbarSquared-spdf_jbar**2))
-
-        dat[i,0,0] = dbl_jackknifed
-        dat[i,0,1] = dbl_err_jackknifed
-        dat[i,1,0] = spdf_jackknifed
-        dat[i,1,1] = spdf_err_jackknifed
-    
-    return dat
-    """
-    raise NotImplementedError
-    
-
-
 def findAtomPosition(imgs):
     # Given an array of images, find and return the x and y coordinates of the peak
-    filt_img = medfilt2d( np.mean(imgs, axis = 0), kernel_size = 5 )
+    filt_img = medfilt2d( np.mean(imgs, axis = 0) )
     xpos = np.sum(filt_img, axis = 0).argmax()
     ypos = np.sum(filt_img, axis = 1).argmax()
     return xpos, ypos
+    
+    
+    
