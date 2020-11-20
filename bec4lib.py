@@ -453,9 +453,9 @@ def doublonAnalysis(Ncounts, doublon_mode, scan_var):
     spdf = (allAtoms_ave - rmPairs_ave) / (allAtoms_ave - rmDoublons_ave)
     
     dblerr = dblfrac * np.sqrt( allAtoms_std**2 / allAtoms_ave**2 + rmDoublons_std**2 / rmDoublons_ave**2 )
-    spdferr = np.sqrt( (allAtoms_std**2 + rmPairs_std**2) / (allAtoms_ave - rmDoublons_ave)**2 \
-                      + (allAtoms_ave - rmPairs_ave)**2 * (allAtoms_std**2 + rmDoublons_std**2) \
-                          / (allAtoms_ave - rmDoublons_ave)**4)
+    spdferr = np.sqrt( allAtoms_std**2 * ( (rmPairs_ave - allAtoms_ave) / (allAtoms_ave - rmDoublons_ave)**2 \
+                    + 1/(allAtoms_ave - rmDoublons_ave) )**2 + rmPairs_std**2 / (allAtoms_ave - rmDoublons_ave)**2 \
+                    + rmDoublons_std**2 * (allAtoms_ave - rmPairs_ave)**2 / (allAtoms_ave - rmDoublons_ave)**4)
         
     return dblfrac, spdf, dblerr, spdferr
 
