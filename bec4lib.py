@@ -413,12 +413,13 @@ def pca(pwas, pwoas):
     
     return recon_pwoas
 
-def doublonAnalysis(Ncounts, doublon_mode, scan_var):
+def doublonAnalysis(Ncounts, doublon_mode, scan_var, removeBias=False):
     """
     Input
         Ncounts: array of ncounts
         doublon_mode: array of 'doublon_mode' variable value
         scan_var: array of specified variable value
+        removeBias: flag for removing bias in SPDF
 
     Output
         dblfrac, spdf, dblerr, spdferr
@@ -456,7 +457,11 @@ def doublonAnalysis(Ncounts, doublon_mode, scan_var):
     spdferr = np.sqrt( allAtoms_std**2 * ( (rmPairs_ave - allAtoms_ave) / (allAtoms_ave - rmDoublons_ave)**2 \
                     + 1/(allAtoms_ave - rmDoublons_ave) )**2 + rmPairs_std**2 / (allAtoms_ave - rmDoublons_ave)**2 \
                     + rmDoublons_std**2 * (allAtoms_ave - rmPairs_ave)**2 / (allAtoms_ave - rmDoublons_ave)**4)
-        
+    
+    spdf_bias = (spdf-1)/np.power(dblfrac,2) * np.power(allAtoms_std/allAtoms_ave,2) + spdf/np.power(dblfrac,2) * np.power(rmDoublons_std/allAtoms_ave,2)
+    if removeBias:
+        spdf -= spdf_bias
+        print(spdf_bias)
     return dblfrac, spdf, dblerr, spdferr
 
 def multiFrameAnalysis(Ncounts, frame_number, scan_var):
