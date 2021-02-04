@@ -151,13 +151,28 @@ class BEC4image:
         self.pwoa = None
         self.dark = None
     
-    def absorptiveImage(self):
+    def absorptiveImage(self,crop=None):
+        """
+        crop:
+            tuple of tuples describing the window to be cropped
+        """
+        if crop:
+            x1 = crop[0][0]
+            x2 = crop[0][1]
+            y1 = crop[1][0]
+            y2 = crop[1][1]
+        else:
+            x1 = 0
+            x2 = self.colN
+            y1 = 0
+            y2 = self.rowN
+
         try:
             if self.frameN != 3:
                 raise frameNumError
-            self.pwa = np.minimum(self.raw[:,0,:,:],65535)
-            self.pwoa = np.minimum(self.raw[:,1,:,:],65535)
-            self.dark = np.minimum(self.raw[:,2,:,:],65535)
+            self.pwa = np.minimum(self.raw[:,0,x1:x2,y1:y2],65535)
+            self.pwoa = np.minimum(self.raw[:,1,x1:x2,y1:y2],65535)
+            self.dark = np.minimum(self.raw[:,2,x1:x2,y1:y2],65535)
             a_up = np.minimum(self.pwa-self.dark,65536,dtype='float')
             a_down = np.minimum(self.pwoa-self.dark,65536,dtype='float')
             a_down = np.maximum(a_down,1,dtype='float')
@@ -165,6 +180,40 @@ class BEC4image:
             return self.absImg
         except frameNumError:
             print(f"you only have {self.frameN} frame(s). You need three to compute normal absorption images")
+    
+    def spinDifferenceImage(self,crop=None):
+        if crop:
+            x1 = crop[0][0]
+            x2 = crop[0][1]
+            y1 = crop[1][0]
+            y2 = crop[1][1]
+        else:
+            x1 = 0
+            x2 = self.colN
+            y1 = 0
+            y2 = self.rowN
+
+        try:
+            if self.frameN !=1:
+                raise frameNumError
+            windowSize = 180
+            numWindows = self.rowN//windowSize
+
+            self.pwa = np.minimum(self.raw[:,0,:,0:2*windowSize],65536,dtype='float')
+            self.pwoa = np.minimum(self.raw[:,0,:,2*windowSize:3*windowSize],65536,dtype='float')
+            self.dark = np.minimum(self.raw[:,0,:,3*windowSize:4*windowSize],65536,dtype='float')
+
+
+
+            a_up1 = np.minimum(self.pwa[:,:,0:windowSize]-self.dark,65536,dtype='float')
+            a_up2 = np.minimum(self.pwa[:,:,windowSize:2*windowSize]-self.dark,65536,dtype='float')
+            a_down = np.minimum(self.pwoa-self.dark,65536,dtype='float')
+            a_down = np.maximum(a_down,1,dtype='float')
+            self.absImg = -np.log(np.maximum(np.abs(a_up1/a_down),0.002))[:,x1:x2,y1:y2]
+            self.absImg2 = -np.log(np.maximum(np.abs(a_up2/a_down),0.002))[:,x1:x2,y1:y2]
+        
+        except frameNumError:
+            print(f"you have {self.frameN} frames. That's too many for kinetics imaging.")
     
     def absorptiveKinetic(self,knifeEdge=30, bottomEdge = 20, doPCA = False, PCA_window = None, isFastKinetic = False):
         """

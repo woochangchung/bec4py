@@ -120,24 +120,27 @@ def absImgNcount(img,isConstrained=False,p0c = None):
         bound_x = ((p0_x[0]*0.5,p0_x[1]-1,p0_x[2]*0.95,p0_x[3]-0.2,p0_x[4]-0.001),(p0_x[0]*1.5,p0_x[1]+1,p0_x[2]*1.05,p0_x[3]+0.2,p0_x[4]+0.001))
         bound_y = ((p0_y[0]*0.5,p0_y[1]-1,p0_y[2]*0.95,p0_y[3]-0.2,p0_y[4]-0.001),(p0_y[0]*1.5,p0_y[1]+1,p0_y[2]*1.05,p0_y[3]+0.2,p0_y[4]+0.001))
 
-    fparsX, _ = curve_fit( gaussian_sloped, np.arange(0, len(xcut)), xcut, p0 = p0_x, bounds=bound_x)
-    fparsY, _ = curve_fit( gaussian_sloped, np.arange(0, len(ycut)), ycut, p0 = p0_y, bounds=bound_y)
+    fparsX, covX = curve_fit( gaussian_sloped, np.arange(0, len(xcut)), xcut, p0 = p0_x, bounds=bound_x)
+    fparsY, covY = curve_fit( gaussian_sloped, np.arange(0, len(ycut)), ycut, p0 = p0_y, bounds=bound_y)
     
     Nx = np.sqrt(2*np.pi) * fparsX[0] * np.abs(fparsX[2])
     Ny = np.sqrt(2*np.pi) * fparsY[0] * np.abs(fparsY[2])
+    deltaNx = Nx * np.sqrt(covX[0,0]/(fparsX[0]**2) + covX[2,2]/(fparsX[2]**2))
+    deltaNy = Ny * np.sqrt(covY[0,0]/(fparsY[0]**2) + covY[2,2]/(fparsY[2]**2))
     #return np.sqrt( np.abs(Nx * Ny) )
-    return fparsX,fparsY,xcut,ycut
+    return fparsX,fparsY,xcut,ycut,deltaNx,deltaNy
 
-def findCloud(rawimg,window=40):
+def findCloud(rawimg,window=40,threshold=0.55):
     """
     input: 2d image
     output: ROI with atom at the center (if it exists)
+    threshold: fraction of window radius by which the cloud center can possibly deviate from the window center
     """
     meanim = convolve2d(rawimg,np.ones((10,10)),'same')
     xs,ys = meanim.shape
     xmi = np.argmax(np.max(meanim,axis=1,keepdims=0))
     ymi = np.argmax(np.max(meanim,axis=0,keepdims=0))
-    if (meanim[xmi,ymi] < 2) or (abs((xmi-xs/2)/(xs/2))>0.55) or (abs((ymi-ys/2)/(ys/2))>0.55):
+    if (meanim[xmi,ymi] < 2) or (abs((xmi-xs/2)/(xs/2))>threshold) or (abs((ymi-ys/2)/(ys/2))>threshold):
         flag = 1
         cutout = np.nan
     else:
@@ -219,5 +222,10 @@ def fit_2DGaussian(img):
     popt,_ = curve_fit(_gaussian2D,xdata,cutout.ravel(),p02d,bounds=(pLo,pHigh))
     return popt,cutout
     
-    
-    
+def centerOfMass(img):
+    y = np.arange(0,img.shape[0])
+    x = np.arange(0,img.shape[1])
+    X,Y = np.meshgrid(x,y)
+    xmoment = np.sum(X.ravel()*img.ravel())/np.sum(img)
+    ymoment = np.sum(Y.ravel()*img.ravel())/np.sum(img)
+    return np.array([xmoment,ymoment])
